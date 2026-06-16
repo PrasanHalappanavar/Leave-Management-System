@@ -1,0 +1,114 @@
+﻿@{
+    ViewData["Title"] = "Leave History";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-title">Leave History</div>
+
+<div class="alert alert-error" id="errorMsg"></div>
+
+<div class="table-box">
+
+    <div class="search-bar">
+        <input type="text" id="searchInput"
+               placeholder="Search by employee name..." />
+        <select id="statusFilter">
+            <option value="">All Status</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+        </select>
+        <button class="btn-clear" id="btnClear">Clear</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Leave Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Days</th>
+                <th>Status</th>
+                <th>Remarks</th>
+                <th>Action Date</th>
+            </tr>
+        </thead>
+        <tbody id="historyTable">
+            <tr>
+                <td colspan="8" style="text-align:center;color:#888;">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        var allHistory = [];
+
+        $.ajax({
+            url: '/api/manager/history',
+            type: 'GET',
+            success: function (data) {
+                allHistory = data;
+                renderPaginated(data);
+            },
+            error: function () {
+                showToast('Failed to load history.', 'error');
+            }
+        });
+
+        $('#searchInput').on('keyup', function () {
+            applyFilters();
+        });
+
+        $('#statusFilter').on('change', function () {
+            applyFilters();
+        });
+
+        $('#btnClear').on('click', function () {
+            $('#searchInput').val('');
+            $('#statusFilter').val('');
+            renderPaginated(allHistory);
+        });
+
+        function applyFilters() {
+            var keyword = $('#searchInput').val().toLowerCase().trim();
+            var status  = $('#statusFilter').val();
+
+            var filtered = $.grep(allHistory, function (r) {
+                var matchName   = !keyword ||
+                    r.employeeName.toLowerCase().indexOf(keyword) >= 0;
+                var matchStatus = !status || r.status === status;
+                return matchName && matchStatus;
+            });
+
+            renderPaginated(filtered);
+        }
+
+        function renderPaginated(data) {
+            paginate(data, 'historyTable', 'pageInfo', 'pageButtons', 10,
+                function (r) {
+                    return '<tr>' +
+                        '<td>' + r.employeeName  + '</td>' +
+                        '<td>' + r.leaveTypeName + '</td>' +
+                        '<td>' + formatDate(r.fromDate) + '</td>' +
+                        '<td>' + formatDate(r.toDate)   + '</td>' +
+                        '<td>' + r.totalDays    + '</td>' +
+                        '<td><span class="badge badge-' + r.status + '">' +
+                            r.status + '</span></td>' +
+                        '<td>' + (r.remarksFromManager || '—') + '</td>' +
+                        '<td>' + formatDate(r.managerActionDate) + '</td>' +
+                        '</tr>';
+                }
+            );
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '—';
+            var d = new Date(dateStr);
+            return d.getDate().toString().padStart(2, '0') + '/' +
+                   (d.getMonth() + 1).toString().padStart(2, '0') + '/' +
+                   d.getFullYear();
+        }
+    </script>
+}

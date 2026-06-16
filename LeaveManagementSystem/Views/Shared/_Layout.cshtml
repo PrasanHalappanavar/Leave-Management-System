@@ -1,0 +1,169 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - LeaveManagementSystem</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/LeaveManagementSystem.styles.css" asp-append-version="true" />
+</head>
+<body>
+
+    @if (Context.Session.GetInt32("UserId") != null)
+    {
+        var role = Context.Session.GetInt32("Role");
+
+        <nav class="navbar">
+            <div class="nav-brand">Leave Management</div>
+            <div class="nav-links">
+                <span class="nav-user">@Context.Session.GetString("FullName")</span>
+
+                @if (role == 1)
+                {
+                    <a href="/Employee/Dashboard">Dashboard</a>
+                    <a href="/Employee/Apply">Apply Leave</a>
+                    <a href="/Employee/MyRequests">My Requests</a>
+                }
+
+                @if (role == 2)
+                {
+                    <a href="/Manager/Dashboard">Dashboard</a>
+                    <a href="/Manager/Requests">Manage Requests</a>
+                    <a href="/Manager/History">Leave History</a>
+                }
+
+                <a href="/Account/Logout" class="btn-logout">Logout</a>
+            </div>
+        </nav>
+    }
+
+    <div class="main-content">
+        @RenderBody()
+    </div>
+
+    <!-- toast container — toasts appear here -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- jquery must load first -->
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+
+    <script>
+        function showToast(message, type) {
+            type = type || 'success';
+
+            var toast = $(
+                '<div class="toast toast-' + type + '">' +
+                    '<span>' + message + '</span>' +
+                    '<button class="toast-close">✕</button>' +
+                '</div>'
+            );
+
+            $('#toastContainer').append(toast);
+
+            setTimeout(function () {
+                toast.addClass('show');
+            }, 10);
+
+            var timer = setTimeout(function () {
+                hideToast(toast);
+            }, 3000);
+
+            toast.find('.toast-close').on('click', function () {
+                clearTimeout(timer);
+                hideToast(toast);
+            });
+        }
+
+        function hideToast(toast) {
+            toast.removeClass('show').addClass('hide');
+            setTimeout(function () {
+                toast.remove();
+            }, 300);
+        }
+
+        // reusable pagination
+        function paginate(data, tbodyId, infoId, btnId, pageSize, renderFn) {
+            var currentPage = 1;
+            var totalPages  = Math.ceil(data.length / pageSize);
+
+            function render() {
+                var tbody = $('#' + tbodyId);
+                tbody.empty();
+
+                if (data.length === 0) {
+                    tbody.append(
+                        '<tr><td colspan="20" style="text-align:center;' +
+                        'color:#888;padding:20px;">No records found</td></tr>'
+                    );
+                    $('#' + infoId).text('');
+                    $('#' + btnId).empty();
+                    return;
+                }
+
+                var start    = (currentPage - 1) * pageSize;
+                var end      = Math.min(start + pageSize, data.length);
+                var pageData = data.slice(start, end);
+
+                $.each(pageData, function (i, r) {
+                    tbody.append(renderFn(r));
+                });
+
+                $('#' + infoId).text(
+                    'Showing ' + (start + 1) + ' to ' + end +
+                    ' of ' + data.length + ' records'
+                );
+
+                var buttons = $('#' + btnId);
+                buttons.empty();
+
+                buttons.append(
+                    '<button class="page-btn" id="prevBtn" ' +
+                    (currentPage === 1 ? 'disabled' : '') + '>‹ Prev</button>'
+                );
+
+                var startPage = Math.max(1, currentPage - 2);
+                var endPage   = Math.min(totalPages, startPage + 4);
+
+                for (var p = startPage; p <= endPage; p++) {
+                    buttons.append(
+                        '<button class="page-btn ' +
+                        (p === currentPage ? 'active' : '') +
+                        '" data-page="' + p + '">' + p + '</button>'
+                    );
+                }
+
+                buttons.append(
+                    '<button class="page-btn" id="nextBtn" ' +
+                    (currentPage === totalPages ? 'disabled' : '') + '>Next ›</button>'
+                );
+
+                $('#prevBtn').on('click', function () {
+                    if (currentPage > 1) {
+                        currentPage--;
+                        render();
+                    }
+                });
+
+                $('#nextBtn').on('click', function () {
+                    if (currentPage < totalPages) {
+                        currentPage++;
+                        render();
+                    }
+                });
+
+                buttons.find('[data-page]').on('click', function () {
+                    currentPage = parseInt($(this).data('page'));
+                    render();
+                });
+            }
+
+            render();
+        }
+    </script>
+
+    <!-- page specific scripts load after global functions -->
+    @RenderSection("Scripts", required: false)
+
+</body>
+</html>

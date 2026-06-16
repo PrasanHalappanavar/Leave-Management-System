@@ -1,0 +1,305 @@
+﻿@{
+    ViewData["Title"] = "Apply Leave";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<center>
+    <div class="page-title">Apply for Leave</div>
+</center>
+
+<!-- balance box -->
+@* <div id="balanceBox"
+     style="background:#fff;border-radius:8px;padding:14px 18px;
+            max-width:480px;margin-bottom:16px;
+            border-left:4px solid #3498db;display:flex;
+            align-items:center;justify-content:space-between;">
+    <span style="font-size:13px;color:#888;">Available Leave Days</span>
+    <span id="balanceValue"
+          style="font-size:22px;font-weight:700;color:#2c3e50;">—</span>
+</div> *@
+
+<div class="form-box">
+
+    <div class="form-group">
+        <label>Leave Type</label>
+        <select id="leaveTypeId">
+            <option value="">Select leave type</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Manager</label>
+        <select id="managerId">
+            <option value="">Select manager</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>From Date</label>
+        <input type="date" id="fromDate" />
+    </div>
+
+    <div class="form-group">
+        <label>To Date</label>
+        <input type="date" id="toDate" />
+    </div>
+
+    <div class="form-group">
+        <label>Total Days</label>
+        <input type="text" id="totalDays" readonly
+               placeholder="Auto calculated" />
+    </div>
+
+    <div class="form-group">
+        <label>Reason</label>
+        <textarea id="reason" placeholder="Enter reason"></textarea>
+    </div>
+
+    <div id="warningMsg"
+         style="display:none;padding:10px 14px;border-radius:5px;
+                font-size:13px;margin-bottom:14px;border-left:4px solid;">
+    </div>
+
+    <div id="inlineMsg"
+         style="display:none;padding:10px 14px;border-radius:5px;
+            font-size:14px;margin-bottom:14px;
+            border-left:4px solid;">
+    </div>
+
+    <button class="btn btn-primary" id="btnApply">Submit</button>
+
+</div>
+
+@section Scripts {
+    <script>
+        var availableBalance = 0;
+
+        function showMsg(msg, type) {
+            var isSuccess = type === 'success';
+            $('#inlineMsg')
+                .text(msg)
+                .css({
+                    'background': isSuccess ? '#d1e7dd' : '#f8d7da',
+                    'color': isSuccess ? '#0a5c36' : '#842029',
+                    'border-left-color': isSuccess ? '#2ecc71' : '#e74c3c'
+                })
+                .stop(true, true)
+                .fadeIn(200)
+                .delay(3000)
+                .fadeOut(400);
+        }
+
+        function showWarning(msg, type) {
+            var isError = type === 'error';
+            $('#warningMsg')
+                .text(msg)
+                .css({
+                    'background': isError ? '#f8d7da' : '#fff3cd',
+                    'color': isError ? '#842029' : '#856404',
+                    'border-color': isError ? '#e74c3c' : '#f39c12'
+                })
+                .show();
+        }
+
+        function hideWarning() {
+            $('#warningMsg').hide().text('');
+        }
+
+        // load balance
+        $.ajax({
+            url: '/api/employee/dashboard',
+            type: 'GET',
+            success: function (res) {
+                availableBalance = res.availableLeaveDays;
+                $('#balanceValue').text(res.availableLeaveDays);
+
+                if (res.availableLeaveDays <= 3) {
+                    $('#balanceBox').css('border-left-color', '#e74c3c');
+                    $('#balanceValue').css('color', '#e74c3c');
+                } else if (res.availableLeaveDays <= 7) {
+                    $('#balanceBox').css('border-left-color', '#f39c12');
+                    $('#balanceValue').css('color', '#f39c12');
+                }
+
+                calculateDays();
+            },
+            error: function () {
+                showMsg('Failed to load leave balance.', 'error');
+            }
+        });
+
+        // load leave types
+        $.ajax({
+            url: '/api/employee/leavetypes',
+            type: 'GET',
+            success: function (types) {
+                $.each(types, function (i, t) {
+                    $('#leaveTypeId').append(
+                        '<option value="' + t.leaveTypeId + '">' +
+                        t.typeName + '</option>'
+                    );
+                });
+            }
+        });
+
+        // load managers
+        $.ajax({
+            url: '/api/employee/managers',
+            type: 'GET',
+            success: function (managers) {
+                $.each(managers, function (i, m) {
+                    $('#managerId').append(
+                        '<option value="' + m.userId + '">' +
+                        m.fullName + '</option>'
+                    );
+                });
+            }
+        });
+
+        var today = new Date().toISOString().split('T')[0];
+        $('#fromDate').attr('min', today);
+        $('#toDate').attr('min', today);
+
+        $('#fromDate').on('change', function () {
+            $('#toDate').attr('min', $(this).val());
+            if ($('#toDate').val() && $('#toDate').val() < $(this).val()) {
+                $('#toDate').val('');
+                $('#totalDays').val('');
+            }
+            calculateDays();
+        });
+
+        $('#toDate').on('change', function () {
+            calculateDays();
+        });
+
+        function calculateDays() {
+            var fromVal = $('#fromDate').val();
+            var toVal   = $('#toDate').val();
+
+            hideWarning();
+            $('#totalDays').val('');
+
+            if (!fromVal || !toVal) return;
+
+            var from = new Date(fromVal);
+            var to   = new Date(toVal);
+
+            if (from.getDay() === 0 || from.getDay() === 6) {
+                showWarning('From Date cannot be a weekend.', 'error');
+                return;
+            }
+
+            if (to.getDay() === 0 || to.getDay() === 6) {
+                showWarning('To Date cannot be a weekend.', 'error');
+                return;
+            }
+
+            if (to < from) {
+                showWarning('To Date cannot be before From Date.', 'error');
+                return;
+            }
+
+            var count   = 0;
+            var current = new Date(from);
+
+            while (current <= to) {
+                var day = current.getDay();
+                if (day !== 0 && day !== 6) count++;
+                current.setDate(current.getDate() + 1);
+            }
+
+            $('#totalDays').val(count + ' working day(s)');
+
+            if (availableBalance === 0) {
+                showWarning('You have no available leave days remaining.', 'error');
+            } else if (count > availableBalance) {
+                showWarning(
+                    'You are requesting ' + count + ' days but only have ' +
+                    availableBalance + ' day(s) available.',
+                    'error'
+                );
+            }
+        }
+
+        $('#btnApply').on('click', function () {
+            var leaveTypeId = $('#leaveTypeId').val();
+            var managerId = $('#managerId').val();
+            var fromDate = $('#fromDate').val();
+            var toDate = $('#toDate').val();
+            var reason = $('#reason').val().trim();
+            var totalDays = $('#totalDays').val();
+
+            if (!leaveTypeId || !managerId || !fromDate || !toDate || !reason) {
+                showMsg('Please fill all fields.', 'error');
+                return;
+            }
+
+            if ($('#warningMsg').is(':visible')) {
+                showMsg($('#warningMsg').text(), 'error');
+                return;
+            }
+
+            if (!totalDays) {
+                showMsg('Please select valid dates.', 'error');
+                return;
+            }
+
+            $('#btnApply').prop('disabled', true).text('Submitting...');
+
+            $.ajax({
+                url: '/api/employee/apply',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    leaveTypeId: parseInt(leaveTypeId),
+                    managerId: parseInt(managerId),
+                    fromDate: fromDate,
+                    toDate: toDate,
+                    reason: reason
+                }),
+                success: function (res) {
+                    if (res.success) {
+                        showMsg(res.message, 'success');
+                        $('#leaveTypeId').val('');
+                        $('#managerId').val('');
+                        $('#fromDate').val('');
+                        $('#toDate').val('');
+                        $('#totalDays').val('');
+                        $('#reason').val('');
+                        hideWarning();
+
+                        // refresh balance
+                        $.ajax({
+                            url: '/api/employee/dashboard',
+                            type: 'GET',
+                            success: function (data) {
+                                availableBalance = data.availableLeaveDays;
+                                $('#balanceValue').text(data.availableLeaveDays);
+
+                                if (data.availableLeaveDays <= 3) {
+                                    $('#balanceBox').css('border-left-color', '#e74c3c');
+                                    $('#balanceValue').css('color', '#e74c3c');
+                                } else if (data.availableLeaveDays <= 7) {
+                                    $('#balanceBox').css('border-left-color', '#f39c12');
+                                    $('#balanceValue').css('color', '#f39c12');
+                                } else {
+                                    $('#balanceBox').css('border-left-color', '#3498db');
+                                    $('#balanceValue').css('color', '#2c3e50');
+                                }
+                            }
+                        });
+                    } else {
+                        showMsg(res.message, 'error');
+                    }
+                },
+                error: function (xhr) {
+                    showMsg('Error ' + xhr.status + ': Please try again.', 'error');
+                },
+                complete: function () {
+                    $('#btnApply').prop('disabled', false).text('Submit');
+                }
+            });
+        });
+    </script>
+}

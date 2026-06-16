@@ -1,0 +1,197 @@
+﻿
+@{
+    ViewData["Title"] = "Requests";
+}
+
+
+<div class="page-title">Pending Leave Requests</div>
+
+<div class="alert alert-success" id="successMsg"></div>
+<div class="alert alert-error" id="errorMsg"></div>
+
+<div class="table-box">
+
+    <div class="search-bar">
+        <input type="text" id="searchInput"
+               placeholder="Search by employee name..." />
+        <button class="btn-clear" id="btnClear">Clear</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Leave Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Days</th>
+                <th>Reason</th>
+                <th>Applied On</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="requestsTable">
+            <tr>
+                <td colspan="8" style="text-align:center;color:#888;">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        <span class="pagination-info" id="pageInfo"></span>
+        <div class="pagination-buttons" id="pageButtons"></div>
+    </div>
+</div>
+
+<!-- remarks modal — shows when approve or reject is clicked -->
+<div class="modal-overlay" id="remarksModal">
+    <div class="modal-box">
+        <div class="modal-title" id="modalTitle">Add Remarks</div>
+        <div class="form-group">
+            <label>Remarks <span style="color:#888;font-weight:400">(optional)</span></label>
+            <textarea id="remarksText" placeholder="Enter remarks for employee"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-success" id="btnConfirm">Confirm</button>
+            <button class="btn" style="background:#eee;color:#333" id="btnCancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        var selectedRequestId = null;
+        var selectedStatus    = null;
+                var allRequests = [];
+
+        loadRequests();
+
+        function loadRequests() {
+            $.ajax({
+                url: '/api/manager/pending',
+                type: 'GET',
+                success: function (data) {
+                    allRequests = data;
+                    renderPaginated(data);
+                },
+                error: function () {
+                    showToast('Failed to load requests.', 'error');
+                }
+            });
+        }
+
+        $('#searchInput').on('keyup', function () {
+            applySearch();
+        });
+
+
+        $('#btnClear').on('click', function () {
+            $('#searchInput').val('');
+            renderPaginated(allRequests);
+        });
+
+        function applySearch() {
+            var keyword = $('#searchInput').val().toLowerCase().trim();
+
+            var filtered = !keyword
+                ? allRequests
+                : $.grep(allRequests, function (r) {
+                    return r.employeeName.toLowerCase().indexOf(keyword) >= 0;
+                });
+
+            renderPaginated(filtered);
+        }
+
+        function renderPaginated(data) {
+            paginate(data, 'requestsTable', 'pageInfo', 'pageButtons', 10,
+                function (r) {
+                    var action = '';
+                    if (r.status === 'Pending') {
+                        action =
+                            '<div style="display:flex;gap:6px;">' +
+                                '<button class="btn btn-success" ' +
+                                'style="font-size:12px;padding:5px 12px;" ' +
+                                'onclick="openModal(' + r.requestId + ',\'Approved\')">Approve</button>' +
+                                '<button class="btn btn-danger" ' +
+                                'style="font-size:12px;padding:5px 12px;" ' +
+                                'onclick="openModal(' + r.requestId + ',\'Rejected\')">Reject</button>' +
+                            '</div>';
+                    } else {
+                        action = '<span style="color:#aaa;font-size:13px;">—</span>';
+                    }
+
+                    return '<tr>' +
+                        '<td>' + r.employeeName  + '</td>' +
+                        '<td>' + r.leaveTypeName + '</td>' +
+                        '<td>' + formatDate(r.fromDate)  + '</td>' +
+                        '<td>' + formatDate(r.toDate)    + '</td>' +
+                        '<td>' + r.totalDays + '</td>' +
+                        '<td>' + r.reason    + '</td>' +
+                        '<td>' + formatDate(r.appliedOn) + '</td>' +
+                        '<td><span class="badge badge-' + r.status + '">' +
+                            r.status + '</span></td>' +
+                        '<td>' + action + '</td>' +
+                        '</tr>';
+                }
+            );
+        }
+
+        // opens remarks modal and stores which request and status was selected
+        function openModal(requestId, status) {
+            selectedRequestId = requestId;
+            selectedStatus    = status;
+            $('#modalTitle').text(status === 'Approved' ? 'Approve Request' : 'Reject Request');
+            $('#remarksText').val('');
+            $('#remarksModal').addClass('show');
+        }
+
+
+        $('#btnCancel').on('click', function () {
+            $('#remarksModal').removeClass('show');
+        });
+
+
+        $('#btnConfirm').on('click', function () {
+            var remarks = $('#remarksText').val().trim();
+
+            $('#btnConfirm').prop('disabled', true).text('Processing...');
+
+            $.ajax({
+                url: '/api/manager/updatestatus',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    requestId: selectedRequestId,
+                    status:    selectedStatus,
+                    remarks:   remarks
+                }),
+                success: function (res) {
+                    $('#remarksModal').removeClass('show');
+                    if (res.success) {
+                        $('#errorMsg').hide();
+                        $('#successMsg').text(res.message).fadeIn();
+
+                        loadRequests();
+                    } else {
+                        $('#successMsg').hide();
+                        $('#errorMsg').text(res.message).fadeIn();
+                    }
+                    $('#btnConfirm').prop('disabled', false).text('Confirm');
+                },
+                error: function () {
+                    $('#errorMsg').text('Something went wrong.').fadeIn();
+                    $('#btnConfirm').prop('disabled', false).text('Confirm');
+                }
+            });
+        });
+
+
+        function formatDate(dateStr) {
+            var d = new Date(dateStr);
+            return d.getDate().toString().padStart(2,'0') + '/' +
+                   (d.getMonth()+1).toString().padStart(2,'0') + '/' +
+                   d.getFullYear();
+        }
+    </script>
+}

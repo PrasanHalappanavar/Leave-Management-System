@@ -1,0 +1,148 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - LeaveManagementSystem</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/LeaveManagementSystem.styles.css" asp-append-version="true" />
+</head>
+<body>
+
+    <div class="hr-wrapper">
+
+        <aside class="hr-sidebar">
+            <div class="hr-brand">
+                <div class="hr-brand-icon">HR</div>
+                <span>Leave MS</span>
+            </div>
+
+            <nav class="hr-nav">
+                <div class="hr-nav-section">HR Admin</div>
+                <a href="/HR/Dashboard"
+                   class="hr-nav-item @(Context.Request.Path.Value == "/HR/Dashboard" ? "active" : "")">
+                    ⊞ Dashboard
+                </a>
+                <a href="/HR/AddUser"
+                   class="hr-nav-item @(Context.Request.Path.Value == "/HR/AddUser" ? "active" : "")">
+                    ＋ Add User
+                </a>
+                <a href="/HR/AllRequests"
+                   class="hr-nav-item @(Context.Request.Path.Value == "/HR/AllRequests" ? "active" : "")">
+                    ☰ All Requests
+                </a>
+                <a href="/HR/LeaveSummary"
+                   class="hr-nav-item @(Context.Request.Path.Value == "/HR/LeaveSummary" ? "active" : "")">
+                    ◑ Leave Summary
+                </a>
+            </nav>
+
+            <div class="hr-sidebar-footer">
+                <div class="hr-user">
+                    <div class="hr-avatar">@Context.Session.GetString("FullName")?[0]</div>
+                    <div>
+                        <div class="hr-user-name">@Context.Session.GetString("FullName")</div>
+                        <div class="hr-user-role">HR Admin</div>
+                    </div>
+                </div>
+                <a href="/Account/Logout" class="hr-logout">Logout</a>
+            </div>
+        </aside>
+
+        <!-- main content area -->
+        <div class="hr-main">
+            @RenderBody()
+        </div>
+
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    @RenderSection("Scripts", required: false)
+
+
+    <script>
+        function paginate(data, tbodyId, infoId, btnId, pageSize, renderFn) {
+            var currentPage = 1;
+            var totalPages  = Math.ceil(data.length / pageSize);
+
+            function render() {
+                var tbody = $('#' + tbodyId);
+                tbody.empty();
+
+                if (data.length === 0) {
+                    tbody.append(
+                        '<tr><td colspan="20" style="text-align:center;' +
+                        'color:#888;padding:20px;">No records found</td></tr>'
+                    );
+                    $('#' + infoId).text('');
+                    $('#' + btnId).empty();
+                    return;
+                }
+
+                var start = (currentPage - 1) * pageSize;
+                var end   = Math.min(start + pageSize, data.length);
+                var pageData = data.slice(start, end);
+
+
+                $.each(pageData, function (i, r) {
+                    tbody.append(renderFn(r));
+                });
+
+                $('#' + infoId).text(
+                    'Showing ' + (start + 1) + ' to ' + end +
+                    ' of ' + data.length + ' records'
+                );
+
+
+                var buttons = $('#' + btnId);
+                buttons.empty();
+
+                buttons.append(
+                    '<button class="page-btn" id="prevBtn" ' +
+                    (currentPage === 1 ? 'disabled' : '') + '>‹ Prev</button>'
+                );
+
+
+                var startPage = Math.max(1, currentPage - 2);
+                var endPage   = Math.min(totalPages, startPage + 4);
+
+                for (var p = startPage; p <= endPage; p++) {
+                    buttons.append(
+                        '<button class="page-btn ' +
+                        (p === currentPage ? 'active' : '') +
+                        '" data-page="' + p + '">' + p + '</button>'
+                    );
+                }
+
+                buttons.append(
+                    '<button class="page-btn" id="nextBtn" ' +
+                    (currentPage === totalPages ? 'disabled' : '') + '>Next ›</button>'
+                );
+
+                $('#prevBtn').on('click', function () {
+                    if (currentPage > 1) {
+                        currentPage--;
+                        render();
+                    }
+                });
+
+                $('#nextBtn').on('click', function () {
+                    if (currentPage < totalPages) {
+                        currentPage++;
+                        render();
+                    }
+                });
+
+                buttons.find('[data-page]').on('click', function () {
+                    currentPage = parseInt($(this).data('page'));
+                    render();
+                });
+            }
+
+            render();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,241 @@
+﻿@{
+    ViewData["Title"] = "Manager Dashboard";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-title">Manager Dashboard</div>
+
+<!-- stat cards -->
+<div class="cards">
+    <div class="card orange">
+        <div class="card-label">Pending Requests</div>
+        <div class="card-value" id="pendingRequests">—</div>
+    </div>
+    <div class="card green">
+        <div class="card-label">Approved Requests</div>
+        <div class="card-value" id="approvedRequests">—</div>
+    </div>
+    <div class="card red">
+        <div class="card-label">Rejected Requests</div>
+        <div class="card-value" id="rejectedRequests">—</div>
+    </div>
+</div>
+
+<!-- quick action -->
+<div style="margin-bottom:24px;">
+    <a href="/Manager/Requests" class="btn btn-primary">
+        Manage Requests
+    </a>
+    <a href="/Manager/History"
+       class="btn"
+       style="background:#eee;color:#333;margin-left:10px;">
+        Leave History
+    </a>
+</div>
+
+<!-- pending requests preview -->
+<div style="margin-bottom:10px;display:flex;
+            justify-content:space-between;align-items:center;">
+    <span style="font-size:15px;font-weight:600;color:#2c3e50;">
+        Pending Requests
+    </span>
+    <a href="/Manager/Requests"
+       style="font-size:13px;color:#3498db;text-decoration:none;">
+        View all →
+    </a>
+</div>
+
+<div class="table-box" style="margin-bottom:24px;">
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Leave Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Days</th>
+                <th>Applied On</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="pendingTable">
+            <tr>
+                <td colspan="7"
+                    style="text-align:center;color:#888;">
+                    Loading...
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- remarks modal -->
+<div class="modal-overlay" id="remarksModal">
+    <div class="modal-box">
+        <div class="modal-title" id="modalTitle">Add Remarks</div>
+        <div class="form-group">
+            <label>
+                Remarks
+                <span style="color:#888;font-weight:400;">
+                    (optional)
+                </span>
+            </label>
+            <textarea id="remarksText"
+                      placeholder="Enter remarks for employee">
+            </textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-success" id="btnConfirm">
+                Confirm
+            </button>
+            <button class="btn"
+                    style="background:#eee;color:#333;"
+                    id="btnCancel">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        var selectedRequestId = null;
+        var selectedStatus    = null;
+
+        // load dashboard counts
+        $.ajax({
+            url: '/api/manager/dashboard',
+            type: 'GET',
+            success: function (res) {
+                $('#pendingRequests').text(res.pendingRequests);
+                $('#approvedRequests').text(res.approvedRequests);
+                $('#rejectedRequests').text(res.rejectedRequests);
+            },
+            error: function () {
+                showToast('Failed to load dashboard.', 'error');
+            }
+        });
+
+        // load pending requests preview
+        loadPending();
+
+        function loadPending() {
+            $.ajax({
+                url: '/api/manager/pending',
+                type: 'GET',
+                success: function (data) {
+                    var tbody = $('#pendingTable');
+                    tbody.empty();
+
+                    if (data.length === 0) {
+                        tbody.append(
+                            '<tr><td colspan="7" style="text-align:center;' +
+                            'color:#888;">No pending requests</td></tr>'
+                        );
+                        return;
+                    }
+
+                    // show only first 5 on dashboard
+                    var preview = data.slice(0, 5);
+
+                    $.each(preview, function (i, r) {
+
+                        var action = '';
+                        if (r.status === 'Pending') {
+                            action =
+                                '<div style="display:flex;gap:6px;">' +
+                                    '<button class="btn btn-success" ' +
+                                    'style="font-size:12px;padding:5px 12px;" ' +
+                                    'onclick="openModal(' + r.requestId + ',\'Approved\')">✓</button>' +
+                                    '<button class="btn btn-danger" ' +
+                                    'style="font-size:12px;padding:5px 12px;" ' +
+                                    'onclick="openModal(' + r.requestId + ',\'Rejected\')">✕</button>' +
+                                '</div>';
+                        } else {
+                            action = '<span style="color:#aaa;font-size:13px;">—</span>';
+                        }
+
+
+                        tbody.append(
+                            '<tr>' +
+                            '<td>' + r.employeeName  + '</td>' +
+                            '<td>' + r.leaveTypeName + '</td>' +
+                            '<td>' + formatDate(r.fromDate)  + '</td>' +
+                            '<td>' + formatDate(r.toDate)    + '</td>' +
+                            '<td>' + r.totalDays + '</td>' +
+                            '<td>' + formatDate(r.appliedOn) + '</td>' +
+                            '<td>' + action + '</td>' +
+                            '</tr>'
+                        );
+                    });
+                },
+                error: function () {
+                    showToast('Failed to load pending requests.', 'error');
+                }
+            });
+        }
+
+        function openModal(requestId, status) {
+            selectedRequestId = requestId;
+            selectedStatus    = status;
+            $('#modalTitle').text(
+                status === 'Approved' ? 'Approve Request' : 'Reject Request'
+            );
+            $('#remarksText').val('');
+            $('#remarksModal').addClass('show');
+        }
+
+        $('#btnCancel').on('click', function () {
+            $('#remarksModal').removeClass('show');
+        });
+
+        $('#btnConfirm').on('click', function () {
+            var remarks = $('#remarksText').val().trim();
+            $('#btnConfirm').prop('disabled', true).text('Processing...');
+
+            $.ajax({
+                url: '/api/manager/updatestatus',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    requestId: selectedRequestId,
+                    status:    selectedStatus,
+                    remarks:   remarks
+                }),
+                success: function (res) {
+                    $('#remarksModal').removeClass('show');
+                    if (res.success) {
+                        showToast(res.message, 'success');
+                        loadPending();
+
+                        // refresh counts
+                        $.ajax({
+                            url: '/api/manager/dashboard',
+                            type: 'GET',
+                            success: function (res) {
+                                $('#pendingRequests').text(res.pendingRequests);
+                                $('#approvedRequests').text(res.approvedRequests);
+                                $('#rejectedRequests').text(res.rejectedRequests);
+                            }
+                        });
+                    } else {
+                        showToast(res.message, 'error');
+                    }
+                    $('#btnConfirm').prop('disabled', false).text('Confirm');
+                },
+                error: function () {
+                    showToast('Something went wrong.', 'error');
+                    $('#btnConfirm').prop('disabled', false).text('Confirm');
+                }
+            });
+        });
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '—';
+            var d = new Date(dateStr);
+            return d.getDate().toString().padStart(2, '0') + '/' +
+                   (d.getMonth() + 1).toString().padStart(2, '0') + '/' +
+                   d.getFullYear();
+        }
+    </script>
+}

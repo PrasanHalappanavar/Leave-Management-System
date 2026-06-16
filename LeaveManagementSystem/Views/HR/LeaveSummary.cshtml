@@ -1,0 +1,109 @@
+﻿@{
+    ViewData["Title"] = "Leave Summary";
+    Layout = "~/Views/Shared/_HRLayout.cshtml";
+}
+
+<div class="page-title">Leave Summary Report</div>
+
+<div class="table-box">
+    <div class="search-bar">
+        <input type="text" id="searchInput"
+               placeholder="Search by employee name..." />
+        <select id="deptFilter">
+            <option value="">All Departments</option>
+            <option value="IT">IT</option>
+            <option value="HR">HR</option>
+        </select>
+        <button class="btn-clear" id="btnClear">Clear</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Department</th>
+                <th>Available Days</th>
+                <th>Approved Days Used</th>
+                <th>Pending</th>
+                <th>Rejected</th>
+                <th>Cancelled</th>
+                <th>Total Requests</th>
+            </tr>
+        </thead>
+        <tbody id="summaryTable">
+            <tr>
+                <td colspan="8"
+                    style="text-align:center;color:#888;">
+                    Loading...
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        var allSummary = [];
+
+        $.ajax({
+            url: '/api/hr/leavesummary',
+            type: 'GET',
+            success: function (data) {
+                allSummary = data;
+                renderPaginated(data);
+            },
+            error: function () {
+                showToast('Failed to load summary.', 'error');
+            }
+        });
+
+        $('#searchInput').on('keyup', function () {
+            applyFilters();
+        });
+
+        $('#deptFilter').on('change', function () {
+            applyFilters();
+        });
+
+        $('#btnClear').on('click', function () {
+            $('#searchInput').val('');
+            $('#deptFilter').val('');
+            renderPaginated(allSummary);
+        });
+
+        function applyFilters() {
+            var keyword = $('#searchInput').val().toLowerCase().trim();
+            var dept    = $('#deptFilter').val();
+
+            var filtered = $.grep(allSummary, function (r) {
+                var matchName = !keyword ||
+                    r.employeeName.toLowerCase().indexOf(keyword) >= 0;
+                var matchDept = !dept || r.departmentName === dept;
+                return matchName && matchDept;
+            });
+
+            renderPaginated(filtered);
+        }
+
+        function renderPaginated(data) {
+            paginate(data, 'summaryTable', 'pageInfo', 'pageButtons', 10,
+                function (r) {
+                    var balStyle = r.availableLeaveDays <= 3
+                        ? 'color:#e74c3c;font-weight:600' : '';
+
+                    return '<tr>' +
+                        '<td>' + r.employeeName   + '</td>' +
+                        '<td>' + r.departmentName + '</td>' +
+                        '<td style="' + balStyle + '">' +
+                            r.availableLeaveDays  + '</td>' +
+                        '<td>' + r.approvedDays   + '</td>' +
+                        '<td>' + r.pendingCount   + '</td>' +
+                        '<td>' + r.rejectedCount  + '</td>' +
+                        '<td>' + r.cancelledCount + '</td>' +
+                        '<td>' + r.totalRequests  + '</td>' +
+                        '</tr>';
+                }
+            );
+        }
+    </script>
+}

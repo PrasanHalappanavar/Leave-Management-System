@@ -1,0 +1,192 @@
+﻿@{
+    ViewData["Title"] = "HR Dashboard";
+    Layout = "~/Views/Shared/_HRLayout.cshtml";
+}
+
+<div class="page-title">HR Dashboard</div>
+
+<!-- stat cards -->
+<div class="cards">
+    <div class="card blue">
+        <div class="card-label">Total Employees</div>
+        <div class="card-value" id="totalEmployees">—</div>
+    </div>
+    <div class="card green">
+        <div class="card-label">Total Managers</div>
+        <div class="card-value" id="totalManagers">—</div>
+    </div>
+    <div class="card orange">
+        <div class="card-label">Pending Requests</div>
+        <div class="card-value" id="pendingRequests">—</div>
+    </div>
+</div>
+
+<!-- quick actions -->
+<div style="display:flex;gap:12px;margin-bottom:24px;">
+    <a href="/HR/AddUser" class="btn btn-primary">+ Add User</a>
+    <a href="/HR/AllRequests" class="btn btn-warning">View All Requests</a>
+    <a href="/HR/LeaveSummary"
+       class="btn"
+       style="background:#eee;color:#333;">
+        Leave Summary
+    </a>
+</div>
+
+<!-- department wise stats -->
+<div style="margin-bottom:10px;">
+    <span style="font-size:15px;font-weight:600;color:#2c3e50;">
+        Department Overview
+    </span>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+            gap:16px;margin-bottom:24px;"
+     id="deptCards">
+</div>
+
+
+<div style="margin-bottom:10px;display:flex;
+            justify-content:space-between;align-items:center;">
+    <span style="font-size:15px;font-weight:600;color:#2c3e50;">
+        Recent Leave Activity
+    </span>
+    <a href="/HR/AllRequests"
+       style="font-size:13px;color:#3498db;text-decoration:none;">
+        View all →
+    </a>
+</div>
+
+<div class="table-box">
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Manager</th>
+                <th>Leave Type</th>
+                <th>Days</th>
+                <th>Status</th>
+                <th>Applied On</th>
+            </tr>
+        </thead>
+        <tbody id="recentActivity">
+            <tr>
+                <td colspan="6"
+                    style="text-align:center;color:#888;">
+                    Loading...
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+
+        $.ajax({
+            url: '/api/hr/dashboard',
+            type: 'GET',
+            success: function (res) {
+                $('#totalEmployees').text(res.totalEmployees);
+                $('#totalManagers').text(res.totalManagers);
+                $('#pendingRequests').text(res.pendingRequests);
+            },
+            error: function () {
+                showToast('Failed to load dashboard.', 'error');
+            }
+        });
+
+        // load department wise stats from leave summary
+        $.ajax({
+            url: '/api/hr/leavesummary',
+            type: 'GET',
+            success: function (data) {
+                var depts = {};
+
+                // group employees by department
+                $.each(data, function (i, r) {
+                    if (!depts[r.departmentName]) {
+                        depts[r.departmentName] = {
+                            employees: 0,
+                            approvedDays: 0,
+                            pending: 0
+                        };
+                    }
+                    depts[r.departmentName].employees++;
+                    depts[r.departmentName].approvedDays += r.approvedDays;
+                    depts[r.departmentName].pending      += r.pendingCount;
+                });
+
+                var colors = ['blue', 'green', 'orange', 'red'];
+                var i = 0;
+
+                $.each(depts, function (deptName, stats) {
+                    var color = colors[i % colors.length];
+                    $('#deptCards').append(
+                        '<div class="card ' + color + '">' +
+                            '<div class="card-label">' + deptName + '</div>' +
+                            '<div class="card-value">' +
+                                stats.employees + ' emp' +
+                            '</div>' +
+                            '<div style="font-size:12px;color:#888;margin-top:6px;">' +
+                                stats.approvedDays + ' days approved &nbsp;|&nbsp; ' +
+                                stats.pending + ' pending' +
+                            '</div>' +
+                        '</div>'
+                    );
+                    i++;
+                });
+
+                if (Object.keys(depts).length === 0) {
+                    $('#deptCards').append(
+                        '<p style="color:#888;font-size:13px;">No data yet</p>'
+                    );
+                }
+            }
+        });
+
+        // load recent 5 requests across all employees
+        $.ajax({
+            url: '/api/hr/allrequests',
+            type: 'GET',
+            success: function (data) {
+                var tbody = $('#recentActivity');
+                tbody.empty();
+
+                var recent = data.slice(0, 5);
+
+                if (recent.length === 0) {
+                    tbody.append(
+                        '<tr><td colspan="6" style="text-align:center;' +
+                        'color:#888;">No activity yet</td></tr>'
+                    );
+                    return;
+                }
+
+                $.each(recent, function (i, r) {
+                    tbody.append(
+                        '<tr>' +
+                        '<td>' + r.employeeName  + '</td>' +
+                        '<td>' + r.managerName   + '</td>' +
+                        '<td>' + r.leaveTypeName + '</td>' +
+                        '<td>' + r.totalDays     + '</td>' +
+                        '<td><span class="badge badge-' + r.status + '">' +
+                            r.status + '</span></td>' +
+                        '<td>' + formatDate(r.appliedOn) + '</td>' +
+                        '</tr>'
+                    );
+                });
+            },
+            error: function () {
+                showToast('Failed to load recent activity.', 'error');
+            }
+        });
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '—';
+            var d = new Date(dateStr);
+            return d.getDate().toString().padStart(2, '0') + '/' +
+                   (d.getMonth() + 1).toString().padStart(2, '0') + '/' +
+                   d.getFullYear();
+        }
+    </script>
+}

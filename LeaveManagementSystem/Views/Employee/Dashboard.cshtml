@@ -1,0 +1,184 @@
+﻿@{
+    ViewData["Title"] = "Dashboard";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-title">Welcome, <span id="empName">@Context.Session.GetString("FullName")</span></div>
+
+<!-- stat cards -->
+<div class="cards">
+    <div class="card blue">
+        <div class="card-label">Available Leave Days</div>
+        <div class="card-value" id="availableDays">—</div>
+    </div>
+    <div class="card green">
+        <div class="card-label">Total Requests</div>
+        <div class="card-value" id="totalRequests">—</div>
+    </div>
+    <div class="card orange">
+        <div class="card-label">Pending</div>
+        <div class="card-value" id="pendingRequests">—</div>
+    </div>
+    <div class="card green">
+        <div class="card-label">Approved</div>
+        <div class="card-value" id="approvedRequests">—</div>
+    </div>
+</div>
+
+
+
+<div style="background:#fff;border-radius:8px;padding:20px;
+            margin-bottom:20px;max-width:480px;">
+    <div style="display:flex;justify-content:space-between;
+                margin-bottom:8px;">
+        <span style="font-size:13px;color:#888;">Leave Balance Used</span>
+        <span id="balancePercent"
+              style="font-size:13px;font-weight:600;color:#2c3e50;">—</span>
+    </div>
+    <div style="background:#f0f2f5;border-radius:20px;height:10px;">
+        <div id="balanceBar"
+             style="height:10px;border-radius:20px;
+                    background:#3498db;width:0%;
+                    transition:width 0.6s ease;">
+        </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;">
+        <span id="daysUsed" style="font-size:12px;color:#aaa;">— days used</span>
+        <span id="balanceMax"
+              style="font-size:12px;color:#aaa;">— days total</span>
+    </div>
+</div>
+
+
+<div style="margin-bottom:24px;">
+    <a href="/Employee/Apply" class="btn btn-primary">+ Apply for Leave</a>
+</div>
+
+
+
+<div style="margin-bottom:10px;display:flex;
+            justify-content:space-between;align-items:center;">
+    <span style="font-size:15px;font-weight:600;color:#2c3e50;">
+        Recent Requests
+    </span>
+    <a href="/Employee/MyRequests"
+       style="font-size:13px;color:#3498db;text-decoration:none;">
+        View all →
+    </a>
+</div>
+
+<div class="table-box">
+    <table>
+        <thead>
+            <tr>
+                <th>Leave Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Days</th>
+                <th>Status</th>
+                <th>Applied On</th>
+            </tr>
+        </thead>
+        <tbody id="recentTable">
+            <tr>
+                <td colspan="6"
+                    style="text-align:center;color:#888;">
+                    Loading...
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        // load dashboard counts
+        $.ajax({
+            url: '/api/employee/dashboard',
+            type: 'GET',
+            success: function (res) {
+                $('#availableDays').text(res.availableLeaveDays);
+                $('#totalRequests').text(res.totalRequests);
+                $('#pendingRequests').text(res.pendingRequests);
+                $('#approvedRequests').text(res.approvedRequests);
+
+
+                var total  = 22;
+                var used   = total - res.availableLeaveDays;
+                var pct    = Math.min(Math.round((used / total) * 100), 100);
+
+                $('#balanceBar').css('width', pct + '%');
+                $('#balancePercent').text(pct + '% used');
+                $('#balanceMax').text(total + ' days total');
+
+
+
+                // update used days label dynamically
+                $('#daysUsed').text(used + ' day(s) used');
+
+                // change bar color based on usage
+                if (pct >= 80) {
+                    $('#balanceBar').css('background', '#e74c3c');
+                } else if (pct >= 50) {
+                    $('#balanceBar').css('background', '#f39c12');
+                }
+            },
+            error: function () {
+                showToast('Failed to load dashboard.', 'error');
+            }
+        });
+
+        // load name from session via API
+        $.ajax({
+            url: '/api/employee/dashboard',
+            type: 'GET',
+            success: function () {}
+        });
+
+        // load recent 5 requests
+        $.ajax({
+            url: '/api/employee/myrequests',
+            type: 'GET',
+            success: function (data) {
+                var tbody = $('#recentTable');
+                tbody.empty();
+
+                // show only last 5
+                var recent = data.slice(0, 5);
+
+                if (recent.length === 0) {
+                    tbody.append(
+                        '<tr><td colspan="6" style="text-align:center;' +
+                        'color:#888;">No requests yet</td></tr>'
+                    );
+                    return;
+                }
+
+                $.each(recent, function (i, r) {
+                    tbody.append(
+                        '<tr>' +
+                        '<td>' + r.leaveTypeName + '</td>' +
+                        '<td>' + formatDate(r.fromDate) + '</td>' +
+                        '<td>' + formatDate(r.toDate) + '</td>' +
+                        '<td>' + r.totalDays + '</td>' +
+                        '<td><span class="badge badge-' + r.status + '">' +
+                            r.status + '</span></td>' +
+                        '<td>' + formatDate(r.appliedOn) + '</td>' +
+                        '</tr>'
+                    );
+                });
+            },
+            error: function () {
+                showToast('Failed to load recent requests.', 'error');
+            }
+        });
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '—';
+            var d = new Date(dateStr);
+            return d.getDate().toString().padStart(2, '0') + '/' +
+                   (d.getMonth() + 1).toString().padStart(2, '0') + '/' +
+                   d.getFullYear();
+        }
+    </script>
+}
