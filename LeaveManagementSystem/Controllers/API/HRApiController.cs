@@ -76,7 +76,7 @@ namespace LeaveManagementSystem.Controllers.API
             {
                 FullName = request.FullName,
                 Email = request.Email,
-                Password = request.Password,
+                Password = HashHelper.HashPassword(request.Password),
                 Role = request.Role,
                 DepartmentId = request.DepartmentId,
                 AvailableLeaveDays = request.Role == 1 ? 22 : 0,

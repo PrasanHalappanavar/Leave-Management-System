@@ -25,7 +25,9 @@ namespace DL_LeaveManagementSystem.Repository
         {
             try
             {
-                return await _context.Users.FirstOrDefaultAsync(u => u.Email == email && u.Password == password);
+                var hashedPassword = HashHelper.HashPassword(password);
+
+                return await _context.Users.FirstOrDefaultAsync(u => u.Email == email && u.Password == hashedPassword);
             }
             catch (Exception ex)
             {
