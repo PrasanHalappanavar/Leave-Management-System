@@ -2,6 +2,7 @@
 using DL_LeaveManagementSystem.Model;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,11 +15,13 @@ namespace DL_LeaveManagementSystem.Repository
     {
         private readonly LMS_DbContext _context;
         private readonly CacheService _cache;
+        private readonly ILogger<LeaveRepository> _logger;
 
-        public LeaveRepository(LMS_DbContext context, CacheService cache)
+        public LeaveRepository(LMS_DbContext context, CacheService cache, ILogger<LeaveRepository> logger)
         {
             _context = context;
             _cache = cache;
+            _logger = logger;
         }
 
         public async Task<User> GetUserByEmail(string email, string password)
@@ -27,11 +30,14 @@ namespace DL_LeaveManagementSystem.Repository
             {
                 var hashedPassword = HashHelper.HashPassword(password);
 
-                return await _context.Users.FirstOrDefaultAsync(u => u.Email == email && u.Password == hashedPassword);
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email && u.Password == hashedPassword);
+                _logger.LogInformation($"{email} user is logged in");
+
+                return user;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetUserByEmail error: " + ex.Message);
+                _logger.LogError(ex, "GetUserByEmail failed for email: {Email}", email);
                 return null;
             }
         }
@@ -44,7 +50,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetUserById error: " + ex.Message);
+                _logger.LogError(ex, "GetUserById failed for UserId: {UserId}", userId);
                 return null;
             }
         }
@@ -56,17 +62,22 @@ namespace DL_LeaveManagementSystem.Repository
                 const string cacheKey = "leave_types";
                 var cached = _cache.Get<List<LeaveType>>(cacheKey);
                 if (cached != null)
+                {
+                    _logger.LogInformation("GetLeaveTypes served from cache");
                     return cached;
+                }
 
                 var types = await _context.LeaveTypes.ToListAsync();
 
                 _cache.Set(cacheKey, types, 60);
 
+                _logger.LogInformation("GetLeaveTypes fetched {Count} types from DB", types.Count);
+
                 return types;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetLeaveTypes error: " + ex.Message);
+                _logger.LogError(ex, "GetLeaveTypes failed for UserId");
                 return new List<LeaveType>();
             }
         }
@@ -86,11 +97,15 @@ namespace DL_LeaveManagementSystem.Repository
                         new SqlParameter("@Reason", reason)
                     ).ToListAsync();
 
-                return result.FirstOrDefault() ?? "ERROR";
+                var outcome = result.FirstOrDefault() ?? "ERROR";
+
+                _logger.LogInformation("ApplyLeave UserId:{UserId} From:{From} To:{To} Result:{Result}", userId, fromDate, toDate, outcome);
+
+                return outcome;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("ApplyLeave error: " + ex.Message);
+                _logger.LogError(ex, "ApplyLeave failed for UserId: {UserId}", userId);
                 return "ERROR";
             }
         }
@@ -107,7 +122,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetMyRequests error: " + ex.Message);
+                _logger.LogError(ex, "GetMyRequests failed for UserId: {UserId}", userId);
                 return new List<MyLeaveRequest>();
             }
         }
@@ -119,7 +134,13 @@ namespace DL_LeaveManagementSystem.Repository
                 var request = await _context.LeaveRequests.FirstOrDefaultAsync(r => r.RequestId == requestId && r.UserId == userId && r.Status == "Pending");
 
                 if (request == null)
+                {
+                    _logger.LogWarning(
+                        "CancelLeave — request not found or not pending. " +
+                        "RequestId:{RequestId} UserId:{UserId}",
+                        requestId, userId);
                     return false;
+                }
 
                 request.Status = "Cancelled";
 
@@ -130,11 +151,15 @@ namespace DL_LeaveManagementSystem.Repository
                 }
 
                 await _context.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    "CancelLeave success. RequestId:{RequestId} " + "UserId:{UserId} DaysRefunded:{Days}",
+                    requestId, userId, request.TotalDays);
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("CancelLeave error: " + ex.Message);
+                _logger.LogError(ex, "CancelLeave failed. RequestId:{RequestId} UserId:{UserId}", requestId, userId);
                 return false;
             }
         }
@@ -151,7 +176,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetPendingRequests error: " + ex.Message);
+                _logger.LogError(ex, "GetPendingRequests failed for ManagerId: {ManagerId}", managerId);
                 return new List<PendingRequest>();
             }
         }
@@ -169,11 +194,16 @@ namespace DL_LeaveManagementSystem.Repository
                         new SqlParameter("@Remarks", remarks ?? "")
                     ).ToListAsync();
 
-                return result.FirstOrDefault() ?? "ERROR";
+                var outcome = result.FirstOrDefault() ?? "ERROR";
+
+                _logger.LogInformation("UpdateLeaveStatus RequestId:{RequestId} " +
+                    "Status:{Status} ManagerId:{ManagerId} Result:{Result}", requestId, status, managerId, outcome);
+
+                return outcome;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("UpdateLeaveStatus error: " + ex.Message);
+                _logger.LogError(ex, "UpdateLeaveStatus failed. RequestId:{RequestId}", requestId);
                 return "ERROR";
             }
         }
@@ -197,7 +227,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetEmployeeDashboard error: " + ex.Message);
+                _logger.LogError(ex, "GetEmployeeDashboard failed for UserId: {UserId}", userId);
                 return new
                 {
                     AvailableLeaveDays = 0,
@@ -225,7 +255,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetManagerDashboard error: " + ex.Message);
+                _logger.LogError(ex, "GetManagerDashboard failed for ManagerId: {ManagerId}", managerId);
                 return new
                 {
                     PendingRequests = 0,
@@ -249,7 +279,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetLeaveHistory error: " + ex.Message);
+                _logger.LogError(ex, "GetLeaveHistory failed for ManagerId: {ManagerId}", managerId);
                 return new List<LeaveHistoryResult>();
             }
         }
@@ -262,7 +292,10 @@ namespace DL_LeaveManagementSystem.Repository
 
                 var cached = _cache.Get<List<User>>(cacheKey);
                 if (cached != null)
+                {
+                    _logger.LogInformation("GetManagers served from cache");
                     return cached;
+                }
 
                 var managers = await _context.Users.Where(u => u.Role == 2)
                     .Select(u => new User
@@ -274,11 +307,13 @@ namespace DL_LeaveManagementSystem.Repository
 
                 _cache.Set(cacheKey, managers, 30);
 
+                _logger.LogInformation("GetManagers fetched {Count} managers from DB", managers.Count);
+
                 return managers;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetManagers error: " + ex.Message);
+                _logger.LogError(ex.Message, "GetManagers failed");
                 return new List<User>();
             }
         }
@@ -295,7 +330,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetAllRequests error: " + ex.Message);
+                _logger.LogError($"{ex.Message} GetAllRequests failed");
                 return new List<AllRequestResult>();
             }
         }
@@ -310,11 +345,13 @@ namespace DL_LeaveManagementSystem.Repository
                 if (user.Role == 2)
                     _cache.Remove("managers_list");
 
+                _logger.LogInformation("AddUser success. Email:{Email} Role:{Role}", user.Email, user.Role);
+
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("AddUser error: " + ex.Message);
+                _logger.LogError(ex.Message, "AddUser failed for Email: {Email}", user.Email);
                 return false;
             }
         }
@@ -336,7 +373,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetHRDashboard error: " + ex.Message);
+                _logger.LogError(ex.Message, "GetHRDashboard failed");
                 return new
                 {
                     TotalEmployees = 0,
@@ -356,7 +393,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetLeaveSummaryAsync error: " + ex.Message);
+                _logger.LogError(ex.Message, "GetLeaveSummaryAsync failed");
                 return new List<LeaveSummaryResult>();
             }
         }
@@ -372,7 +409,7 @@ namespace DL_LeaveManagementSystem.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine("ExpireLeaves error: " + ex.Message);
+                _logger.LogError(ex.Message, "ExpireLeavesAsync failed");
             }
         }
     }

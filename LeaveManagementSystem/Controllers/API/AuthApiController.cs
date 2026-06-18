@@ -1,6 +1,7 @@
 ﻿using DL_LeaveManagementSystem.Abstract;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Serilog;
 
 namespace LeaveManagementSystem.Controllers.API
 {
@@ -50,6 +51,9 @@ namespace LeaveManagementSystem.Controllers.API
         [HttpGet]
         public IActionResult Logout()
         {
+            var userName = HttpContext.Session.GetString("UserId");
+            Log.Information($"User Logged Out. UserName: {userName}");
+
             HttpContext.Session.Clear();
             return Ok(new { success = true, redirectUrl = "/Account/Login" });
         }
